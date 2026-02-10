@@ -255,6 +255,7 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 			}
 
 			$default_enabled = [
+				'admin-menu' => true,
 				'file-lockdown' => true,
 				'admin-domain-guard' => true,
 				'rest-user-privacy' => true,
@@ -262,6 +263,8 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 				'rate-limiter' => true,
 				'rate-limiter-events' => true,
 				'diagnostics-dashboard' => true,
+				'security-headers-baseline' => true,
+				'uploads-execution-guard' => true,
 			];
 
 			$enabled_modules = apply_filters('wpst_enabled_modules', $default_enabled);
@@ -299,6 +302,16 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 			$discovered = apply_filters('wpst_diagnostics_modules', $discovered);
 			if (! is_array($discovered)) {
 				return [];
+			}
+
+			if (isset($discovered['xmlrpc-guard'])) {
+				$xmlrpc_loaded = class_exists('WPST_XMLRPC_Guard');
+				if ($xmlrpc_loaded) {
+					$discovered['xmlrpc-guard']['state'] = 'enabled';
+					$discovered['xmlrpc-guard']['source'] = 'file';
+				} elseif ('enabled' === ($discovered['xmlrpc-guard']['state'] ?? '')) {
+					$discovered['xmlrpc-guard']['state'] = 'disabled';
+				}
 			}
 
 			ksort($discovered);
@@ -378,8 +391,11 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 					'required_capability' => $rest_required_cap,
 				],
 				'xmlrpc_guard' => [
+					'loaded' => class_exists('WPST_XMLRPC_Guard'),
+					'state_source' => class_exists('WPST_XMLRPC_Guard') ? 'file' : 'filter',
 					'xmlrpc_enabled' => (bool) apply_filters('xmlrpc_enabled', true),
-					'pingbacks_enabled' => ! (bool) apply_filters('wpst_xmlrpc_disable_pingback', false),
+					'pingbacks_enabled' => ! (bool) apply_filters('wpst_xmlrpc_disable_pingbacks', true),
+					'block_direct_requests' => (bool) apply_filters('wpst_xmlrpc_block_direct_requests', true),
 				],
 				'uploads_execution_guard' => [
 					'blocked_extension_count' => count((array) apply_filters('wpst_uploads_block_extensions', [

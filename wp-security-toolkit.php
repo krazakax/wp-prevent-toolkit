@@ -308,5 +308,36 @@ add_action('admin_notices', 'wpst_show_deactivation_notice');
 add_action('network_admin_notices', 'wpst_show_deactivation_notice');
 add_filter('pre_update_option_active_plugins', 'wpst_prevent_unauthorized_option_deactivation', 10, 2);
 add_filter('pre_update_site_option_active_sitewide_plugins', 'wpst_prevent_unauthorized_sitewide_deactivation', 10, 2);
+add_action('plugins_loaded', 'wpst_maybe_upgrade_database', 1);
+
+
+if (! function_exists('wpst_install_or_upgrade_database')) {
+	function wpst_install_or_upgrade_database(): void {
+		require_once __DIR__ . '/modules/rate-limiter-events.php';
+		WPST_Rate_Limiter_Events::activate();
+	}
+}
+
+if (! function_exists('wpst_activate_plugin')) {
+	function wpst_activate_plugin(): void {
+		wpst_install_or_upgrade_database();
+	}
+}
+
+if (! function_exists('wpst_maybe_upgrade_database')) {
+	function wpst_maybe_upgrade_database(): void {
+		require_once __DIR__ . '/modules/rate-limiter-events.php';
+
+		$current_version = (string) get_option(WPST_Rate_Limiter_Events::DB_VERSION_OPTION, '0');
+		if (version_compare($current_version, WPST_Rate_Limiter_Events::DB_VERSION, '>=')) {
+			WPST_Rate_Limiter_Events::ensure_cleanup_schedule();
+			return;
+		}
+
+		wpst_install_or_upgrade_database();
+	}
+}
+
+register_activation_hook(WPST_PLUGIN_FILE, 'wpst_activate_plugin');
 
 require_once __DIR__ . '/loader.php';

@@ -14,7 +14,7 @@ if (! class_exists('WPST_Rest_User_Privacy_Guard')) {
 	final class WPST_Rest_User_Privacy_Guard {
 		public function init(): void {
 			add_action('template_redirect', [$this, 'handle_author_enumeration_guards'], 1);
-			add_filter('rest_authentication_errors', [$this, 'restrict_rest_user_endpoints']);
+			add_filter('rest_authentication_errors', [$this, 'restrict_rest_user_endpoints'], 50);
 		}
 
 		public function handle_author_enumeration_guards(): void {
@@ -37,6 +37,10 @@ if (! class_exists('WPST_Rest_User_Privacy_Guard')) {
 		 * @return null|bool|\WP_Error
 		 */
 		public function restrict_rest_user_endpoints($result) {
+			if (! defined('REST_REQUEST') || true !== REST_REQUEST) {
+				return $result;
+			}
+
 			if ($result instanceof \WP_Error) {
 				return $result;
 			}
@@ -47,7 +51,8 @@ if (! class_exists('WPST_Rest_User_Privacy_Guard')) {
 			}
 
 			$required_capability = (string) apply_filters('wpst_rest_users_required_capability', 'list_users');
-			$required_capability = '' !== trim($required_capability) ? $required_capability : 'list_users';
+			$required_capability = sanitize_key($required_capability);
+			$required_capability = '' !== $required_capability ? $required_capability : 'list_users';
 
 			if (! is_user_logged_in()) {
 				return new \WP_Error(
@@ -74,7 +79,7 @@ if (! class_exists('WPST_Rest_User_Privacy_Guard')) {
 				return false;
 			}
 
-			$author_value = trim((string) $_GET['author']);
+			$author_value = trim((string) wp_unslash($_GET['author']));
 			return 1 === preg_match('/^\d+$/', $author_value);
 		}
 
@@ -83,6 +88,7 @@ if (! class_exists('WPST_Rest_User_Privacy_Guard')) {
 			$mode = strtolower(trim($mode));
 
 			if ('redirect' === $mode) {
+				nocache_headers();
 				wp_safe_redirect(home_url('/'), 301);
 				exit;
 			}

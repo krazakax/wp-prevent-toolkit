@@ -15,6 +15,7 @@ $default_enabled_modules = [
 	'admin-domain-guard' => true,
 	'rest-user-privacy' => true,
 	'xmlrpc-guard' => true,
+	'rate-limiter' => true,
 ];
 
 /**
@@ -32,6 +33,7 @@ $ordered_files = [
 	'admin-domain-guard' => 'modules/admin-domain-guard.php',
 	'rest-user-privacy' => 'modules/rest-user-privacy.php',
 	'xmlrpc-guard' => 'modules/xmlrpc-guard.php',
+	'rate-limiter' => 'modules/rate-limiter.php',
 ];
 
 /**

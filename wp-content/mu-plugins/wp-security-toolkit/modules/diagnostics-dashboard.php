@@ -74,6 +74,8 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 				wp_die(esc_html__('You are not allowed to view diagnostics.', 'wp-security-toolkit'), 403);
 			}
 
+			$debug_refresh_valid = $this->is_rate_limit_refresh_request_valid();
+
 			$diagnostics = $this->get_diagnostics();
 			$json = wp_json_encode($diagnostics, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 			if (! is_string($json)) {
@@ -89,6 +91,9 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 				<h1><?php echo esc_html__('WP Security Toolkit — Diagnostics', 'wp-security-toolkit'); ?></h1>
 				<?php if (isset($_GET['wpst_refreshed'])) : ?>
 					<div class="notice notice-success is-dismissible"><p><?php echo esc_html__('Diagnostics were refreshed.', 'wp-security-toolkit'); ?></p></div>
+				<?php endif; ?>
+				<?php if ($debug_refresh_valid) : ?>
+					<div class="notice notice-info is-dismissible"><p><?php echo esc_html__('Rate limiting debug snapshot refreshed.', 'wp-security-toolkit'); ?></p></div>
 				<?php endif; ?>
 
 				<p>
@@ -112,6 +117,9 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 
 				<h2><?php echo esc_html__('Server & Proxy Signals', 'wp-security-toolkit'); ?></h2>
 				<?php $this->render_assoc_table($diagnostics['server_proxy'] ?? []); ?>
+
+				<h2><?php echo esc_html__('Rate Limiting (Debug)', 'wp-security-toolkit'); ?></h2>
+				<?php $this->render_rate_limiter_debug_section(); ?>
 
 				<h2><?php echo esc_html__('Copy Diagnostics JSON', 'wp-security-toolkit'); ?></h2>
 				<p><?php echo esc_html__('Use this sanitized payload for support/debugging.', 'wp-security-toolkit'); ?></p>
@@ -514,6 +522,95 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 			);
 
 			return max(0, $count);
+		}
+
+		private function is_rate_limit_refresh_request_valid(): bool {
+			if (! isset($_GET['wpst_rate_limit_refresh'])) {
+				return false;
+			}
+
+			$nonce = isset($_GET['_wpnonce']) ? (string) $_GET['_wpnonce'] : '';
+			return '' !== $nonce && wp_verify_nonce($nonce, 'wpst_rate_limit_debug_refresh');
+		}
+
+		private function render_rate_limiter_debug_section(): void {
+			if (! current_user_can('manage_options')) {
+				return;
+			}
+
+			// Dev-only example:
+			// add_filter('wpst_rate_limiter_debug_enabled', static function ($enabled) {
+			// 	return function_exists('wp_get_environment_type') && 'development' === wp_get_environment_type();
+			// });
+			$debug_enabled = (bool) apply_filters('wpst_rate_limiter_debug_enabled', false);
+
+			$refresh_url = wp_nonce_url(
+				add_query_arg(
+					[
+						'page' => self::PAGE_SLUG,
+						'wpst_rate_limit_refresh' => '1',
+					],
+					admin_url('options-general.php')
+				),
+				'wpst_rate_limit_debug_refresh'
+			);
+
+			echo '<p><a href="' . esc_url($refresh_url) . '" class="button button-secondary">' . esc_html__('Refresh', 'wp-security-toolkit') . '</a></p>';
+
+			if (! $debug_enabled) {
+				echo '<p>' . esc_html__('Debug snapshot disabled. Enable via filter wpst_rate_limiter_debug_enabled.', 'wp-security-toolkit') . '</p>';
+				return;
+			}
+
+			$snapshot = apply_filters('wpst_rate_limiter_debug_snapshot', null);
+			if (! is_array($snapshot)) {
+				echo '<p>' . esc_html__('No debug snapshot is available for this request.', 'wp-security-toolkit') . '</p>';
+				return;
+			}
+
+			$summary = [
+				'detected_ip' => (string) ($snapshot['detected_ip'] ?? ''),
+				'user_agent_bucket' => (string) ($snapshot['user_agent_bucket'] ?? 'unknown'),
+				'is_whitelisted' => ! empty($snapshot['is_whitelisted']) ? 'yes' : 'no',
+				'is_blocked' => ! empty($snapshot['is_blocked']) ? 'yes' : 'no',
+				'is_admin_bypassed' => ! empty($snapshot['is_admin_bypassed']) ? 'yes' : 'no',
+				'current_minute_bucket' => (string) ($snapshot['current_minute_bucket'] ?? ''),
+				'block_transient_key' => (string) ($snapshot['block_transient_key'] ?? ''),
+				'block_expires_in_seconds' => isset($snapshot['block_expires_in_seconds']) && null !== $snapshot['block_expires_in_seconds']
+					? (string) max(0, (int) $snapshot['block_expires_in_seconds'])
+					: 'unknown',
+			];
+
+			$this->render_assoc_table($summary);
+
+			$counters = isset($snapshot['counters']) && is_array($snapshot['counters']) ? $snapshot['counters'] : [];
+			echo '<h3>' . esc_html__('Current Per-Minute Counters', 'wp-security-toolkit') . '</h3>';
+			echo '<table class="widefat striped" style="max-width: 1100px"><thead><tr>';
+			echo '<th>' . esc_html__('Type', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Value', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Transient Key', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('TTL (seconds)', 'wp-security-toolkit') . '</th>';
+			echo '</tr></thead><tbody>';
+
+			foreach ($counters as $type => $counter) {
+				$counter = is_array($counter) ? $counter : [];
+				$value = isset($counter['value']) ? (int) $counter['value'] : 0;
+				$key = isset($counter['transient_key']) ? (string) $counter['transient_key'] : '';
+				$ttl = array_key_exists('ttl_seconds', $counter) && null !== $counter['ttl_seconds'] ? (string) max(0, (int) $counter['ttl_seconds']) : 'unknown';
+
+				echo '<tr>';
+				echo '<td><code>' . esc_html((string) $type) . '</code></td>';
+				echo '<td>' . esc_html((string) $value) . '</td>';
+				echo '<td><code>' . esc_html($key) . '</code></td>';
+				echo '<td>' . esc_html($ttl) . '</td>';
+				echo '</tr>';
+			}
+
+			echo '</tbody></table>';
+
+			echo '<h3>' . esc_html__('Settings Summary', 'wp-security-toolkit') . '</h3>';
+			$settings_summary = isset($snapshot['settings_summary']) && is_array($snapshot['settings_summary']) ? $snapshot['settings_summary'] : [];
+			$this->render_nested_section($settings_summary);
 		}
 
 		/**

@@ -703,7 +703,13 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 	}
 }
 
-add_action('muplugins_loaded', static function (): void {
+$bootstrap = static function (): void {
 	$dashboard = new WPST_Diagnostics_Dashboard();
 	$dashboard->register_hooks();
-});
+};
+
+if (did_action('muplugins_loaded')) {
+	$bootstrap();
+} else {
+	add_action('plugins_loaded', $bootstrap);
+}

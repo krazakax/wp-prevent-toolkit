@@ -56,9 +56,10 @@ if (! class_exists('WPST_Rate_Limiter')) {
 		}
 
 		public function register_admin_menu(): void {
-			add_options_page(
+			add_submenu_page(
+				'wp-security-toolkit',
 				__('WP Security Toolkit — Rate Limiting', 'wp-security-toolkit'),
-				__('WP Security Toolkit: Rate Limiting', 'wp-security-toolkit'),
+				__('Rate Limiting', 'wp-security-toolkit'),
 				'manage_options',
 				self::PAGE_SLUG,
 				[$this, 'render_settings_page']

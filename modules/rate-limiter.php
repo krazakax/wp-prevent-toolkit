@@ -180,6 +180,7 @@ if (! class_exists('WPST_Rate_Limiter')) {
 			}
 
 			if ($this->is_blocked($ip)) {
+				$this->log_rate_limit_decision('block', 'any', $this->is_crawler_request() ? 'crawler' : 'human', (int) $this->settings()['block_duration_seconds'], $ip);
 				$this->send_block_response();
 			}
 		}
@@ -206,6 +207,8 @@ if (! class_exists('WPST_Rate_Limiter')) {
 			$rules = [
 				[
 					'type' => 'any',
+					'event_rule' => 'any',
+					'bucket' => $is_crawler ? 'crawler' : 'human',
 					'limit_key' => 'any_requests_per_min',
 					'action_key' => 'any_action',
 				],
@@ -214,12 +217,16 @@ if (! class_exists('WPST_Rate_Limiter')) {
 			if ($is_crawler) {
 				$rules[] = [
 					'type' => $is_404 ? 'crawler_404' : 'crawler_view',
+					'event_rule' => $is_404 ? 'crawler_404' : 'crawler_views',
+					'bucket' => 'crawler',
 					'limit_key' => $is_404 ? 'crawler_404_per_min' : 'crawler_views_per_min',
 					'action_key' => $is_404 ? 'crawler_404_action' : 'crawler_views_action',
 				];
 			} else {
 				$rules[] = [
 					'type' => $is_404 ? 'human_404' : 'human_view',
+					'event_rule' => $is_404 ? 'human_404' : 'human_views',
+					'bucket' => 'human',
 					'limit_key' => $is_404 ? 'human_404_per_min' : 'human_views_per_min',
 					'action_key' => $is_404 ? 'human_404_action' : 'human_views_action',
 				];
@@ -235,15 +242,38 @@ if (! class_exists('WPST_Rate_Limiter')) {
 				$action = (string) $this->settings()[(string) $rule['action_key']];
 				if ('block' === $action) {
 					$this->block_ip($ip);
+					$this->log_rate_limit_decision('block', (string) ($rule['event_rule'] ?? 'any'), (string) ($rule['bucket'] ?? 'human'), (int) $this->settings()['block_duration_seconds'], $ip);
 					$this->send_block_response();
 				}
 
-				$max_sleep_seconds = max($max_sleep_seconds, $this->calculate_throttle_seconds($count, $limit));
+				$throttle_seconds = $this->calculate_throttle_seconds($count, $limit);
+				$this->log_rate_limit_decision('throttle', (string) ($rule['event_rule'] ?? 'any'), (string) ($rule['bucket'] ?? 'human'), $throttle_seconds, $ip);
+				$max_sleep_seconds = max($max_sleep_seconds, $throttle_seconds);
 			}
 
 			if ($max_sleep_seconds > 0) {
 				sleep($max_sleep_seconds);
 			}
+		}
+
+
+		private function log_rate_limit_decision(string $action, string $rule, string $bucket, ?int $duration_seconds, string $ip): void {
+			if (! function_exists('wpst_log_rate_limit_event')) {
+				return;
+			}
+
+			$country = class_exists('WPST_Rate_Limiter_Events') ? WPST_Rate_Limiter_Events::detect_country_code() : null;
+
+			wpst_log_rate_limit_event([
+				'action' => $action,
+				'rule' => $rule,
+				'bucket' => $bucket,
+				'duration_seconds' => $duration_seconds,
+				'detected_ip' => $ip,
+				'user_agent' => (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''),
+				'path' => (string) ($_SERVER['REQUEST_URI'] ?? '/'),
+				'country' => $country,
+			]);
 		}
 
 		private function add_checkbox_field(string $field, string $label): void {

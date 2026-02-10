@@ -103,6 +103,9 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 				<h2><?php echo esc_html__('Server & Proxy Signals', 'wp-security-toolkit'); ?></h2>
 				<?php $this->render_assoc_table($diagnostics['server_proxy'] ?? []); ?>
 
+				<h2><?php echo esc_html__('Rate Limiting — Recent Events', 'wp-security-toolkit'); ?></h2>
+				<?php $this->render_rate_limit_recent_events(); ?>
+
 				<h2><?php echo esc_html__('Rate Limiting (Debug)', 'wp-security-toolkit'); ?></h2>
 				<?php $this->render_rate_limiter_debug_section(); ?>
 
@@ -257,6 +260,7 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 				'rest-user-privacy' => true,
 				'xmlrpc-guard' => true,
 				'rate-limiter' => true,
+				'rate-limiter-events' => true,
 				'diagnostics-dashboard' => true,
 			];
 
@@ -516,6 +520,53 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 
 			$nonce = isset($_GET['_wpnonce']) ? (string) $_GET['_wpnonce'] : '';
 			return '' !== $nonce && wp_verify_nonce($nonce, 'wpst_rate_limit_debug_refresh');
+		}
+
+
+		private function render_rate_limit_recent_events(): void {
+			if (! current_user_can('manage_options')) {
+				return;
+			}
+
+			if (! class_exists('WPST_Rate_Limiter_Events')) {
+				echo '<p>' . esc_html__('Rate limit event logger module is not available.', 'wp-security-toolkit') . '</p>';
+				return;
+			}
+
+			$events = WPST_Rate_Limiter_Events::recent_events(50);
+			if ([] === $events) {
+				echo '<p>' . esc_html__('No recent rate limit events found.', 'wp-security-toolkit') . '</p>';
+				return;
+			}
+
+			echo '<table class="widefat striped" style="max-width: 1200px"><thead><tr>';
+			echo '<th>' . esc_html__('Created (UTC)', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Action', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Rule', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Bucket', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Country', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('IP Hash', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Path', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('User Agent', 'wp-security-toolkit') . '</th>';
+			echo '</tr></thead><tbody>';
+
+			foreach ($events as $event) {
+				$event = is_array($event) ? $event : [];
+				$ip_hash = (string) ($event['ip_hash'] ?? '');
+				$ip_hash_short = '' !== $ip_hash ? substr($ip_hash, 0, 12) . '…' : '';
+				echo '<tr>';
+				echo '<td>' . esc_html((string) ($event['created_at_utc'] ?? '')) . '</td>';
+				echo '<td><code>' . esc_html((string) ($event['action'] ?? '')) . '</code></td>';
+				echo '<td><code>' . esc_html((string) ($event['rule'] ?? '')) . '</code></td>';
+				echo '<td><code>' . esc_html((string) ($event['bucket'] ?? '')) . '</code></td>';
+				echo '<td>' . esc_html((string) ($event['country'] ?? '')) . '</td>';
+				echo '<td><code title="' . esc_attr($ip_hash) . '">' . esc_html($ip_hash_short) . '</code></td>';
+				echo '<td><code>' . esc_html((string) ($event['path'] ?? '')) . '</code></td>';
+				echo '<td>' . esc_html((string) ($event['user_agent'] ?? '')) . '</td>';
+				echo '</tr>';
+			}
+
+			echo '</tbody></table>';
 		}
 
 		private function render_rate_limiter_debug_section(): void {

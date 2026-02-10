@@ -11,6 +11,7 @@ if (! defined('WPST_TOOLKIT_DIR')) {
 }
 
 $default_enabled_modules = [
+	'admin-menu' => true,
 	'file-lockdown' => true,
 	'admin-domain-guard' => true,
 	'rest-user-privacy' => true,
@@ -31,6 +32,7 @@ if (! is_array($enabled_modules)) {
 }
 
 $ordered_files = [
+	'admin-menu' => 'modules/admin-menu.php',
 	'file-lockdown' => 'modules/file-lockdown.php',
 	'admin-domain-guard' => 'modules/admin-domain-guard.php',
 	'rest-user-privacy' => 'modules/rest-user-privacy.php',

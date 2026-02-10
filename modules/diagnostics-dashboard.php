@@ -24,28 +24,13 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 		}
 
 		public function register_admin_menu(): void {
-			$capability = $this->capability();
-			$callback = [$this, 'render_page'];
-			$parent_slug = $this->find_toolkit_parent_menu_slug();
-
-			if (null !== $parent_slug) {
-				add_submenu_page(
-					$parent_slug,
-					__('WP Security Toolkit — Diagnostics', 'wp-security-toolkit'),
-					__('Diagnostics', 'wp-security-toolkit'),
-					$capability,
-					self::PAGE_SLUG,
-					$callback
-				);
-				return;
-			}
-
-			add_options_page(
+			add_submenu_page(
+				'wp-security-toolkit',
 				__('WP Security Toolkit — Diagnostics', 'wp-security-toolkit'),
-				__('WP Security Toolkit: Diagnostics', 'wp-security-toolkit'),
-				$capability,
+				__('Diagnostics', 'wp-security-toolkit'),
+				$this->capability(),
 				self::PAGE_SLUG,
-				$callback
+				[$this, 'render_page']
 			);
 		}
 
@@ -62,7 +47,7 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 					'page' => self::PAGE_SLUG,
 					'wpst_refreshed' => '1',
 				],
-				admin_url('options-general.php')
+				admin_url('admin.php')
 			);
 
 			wp_safe_redirect($target);
@@ -550,7 +535,7 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 						'page' => self::PAGE_SLUG,
 						'wpst_rate_limit_refresh' => '1',
 					],
-					admin_url('options-general.php')
+					admin_url('admin.php')
 				),
 				'wpst_rate_limit_debug_refresh'
 			);
@@ -681,25 +666,6 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 			return constant($constant_name) ? 'true' : 'false';
 		}
 
-		private function find_toolkit_parent_menu_slug(): ?string {
-			global $submenu;
-			if (! isset($submenu['options-general.php']) || ! is_array($submenu['options-general.php'])) {
-				return null;
-			}
-
-			foreach ($submenu['options-general.php'] as $item) {
-				if (! is_array($item) || ! isset($item[0], $item[2])) {
-					continue;
-				}
-
-				$label = wp_strip_all_tags((string) $item[0]);
-				if (false !== stripos($label, 'WP Security Toolkit')) {
-					return (string) $item[2];
-				}
-			}
-
-			return null;
-		}
 	}
 }
 

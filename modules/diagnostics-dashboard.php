@@ -12,6 +12,9 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 		private const TRANSIENT_KEY = 'wpst_diagnostics_payload';
 		private const CACHE_TTL = 300;
 		private const REFRESH_ACTION = 'wpst_refresh_diagnostics';
+		private const REMOTE_HTTP_ACTION = 'wpst_run_remote_http_test';
+		private const REMOTE_HTTP_TRANSIENT_KEY = 'wpst_remote_http_test_result';
+		private const REMOTE_HTTP_TRANSIENT_TTL = 600;
 
 		/**
 		 * @var array<string, mixed>|null
@@ -21,6 +24,7 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 		public function register_hooks(): void {
 			add_action('admin_menu', [$this, 'register_admin_menu'], 80);
 			add_action('admin_post_' . self::REFRESH_ACTION, [$this, 'handle_refresh_request']);
+			add_action('admin_post_' . self::REMOTE_HTTP_ACTION, [$this, 'handle_remote_http_test_request']);
 		}
 
 		public function register_admin_menu(): void {
@@ -80,6 +84,9 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 				<?php if ($debug_refresh_valid) : ?>
 					<div class="notice notice-info is-dismissible"><p><?php echo esc_html__('Rate limiting debug snapshot refreshed.', 'wp-security-toolkit'); ?></p></div>
 				<?php endif; ?>
+				<?php if (isset($_GET['wpst_remote_http_tested'])) : ?>
+					<div class="notice notice-success is-dismissible"><p><?php echo esc_html__('Remote HTTP test completed.', 'wp-security-toolkit'); ?></p></div>
+				<?php endif; ?>
 
 				<p>
 					<a href="<?php echo esc_url($refresh_url); ?>" class="button button-secondary"><?php echo esc_html__('Refresh status', 'wp-security-toolkit'); ?></a>
@@ -108,6 +115,9 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 
 				<h2><?php echo esc_html__('Rate Limiting (Debug)', 'wp-security-toolkit'); ?></h2>
 				<?php $this->render_rate_limiter_debug_section(); ?>
+
+				<h2><?php echo esc_html__('Remote HTTP Health Check', 'wp-security-toolkit'); ?></h2>
+				<?php $this->render_remote_http_health_check_section(); ?>
 
 				<h2><?php echo esc_html__('Copy Diagnostics JSON', 'wp-security-toolkit'); ?></h2>
 				<p><?php echo esc_html__('Use this sanitized payload for support/debugging.', 'wp-security-toolkit'); ?></p>
@@ -536,6 +546,137 @@ if (! class_exists('WPST_Diagnostics_Dashboard')) {
 
 			$nonce = isset($_GET['_wpnonce']) ? (string) $_GET['_wpnonce'] : '';
 			return '' !== $nonce && wp_verify_nonce($nonce, 'wpst_rate_limit_debug_refresh');
+		}
+
+		public function handle_remote_http_test_request(): void {
+			if (! current_user_can('manage_options')) {
+				wp_die(esc_html__('You are not allowed to run remote HTTP tests.', 'wp-security-toolkit'), 403);
+			}
+
+			check_admin_referer(self::REMOTE_HTTP_ACTION);
+
+			$urls = $this->remote_http_targets();
+			$results = [];
+
+			foreach ($urls as $url) {
+				$start = microtime(true);
+				$response = wp_remote_get($url, [
+					'timeout' => 15,
+					'redirection' => 3,
+				]);
+				$elapsed_ms = (int) round((microtime(true) - $start) * 1000);
+
+				$row = [
+					'url' => $url,
+					'status_code' => 'n/a',
+					'response_time_ms' => $elapsed_ms,
+					'error_message' => '',
+				];
+
+				if (is_wp_error($response)) {
+					$row['error_message'] = $response->get_error_message();
+				} else {
+					$row['status_code'] = (string) wp_remote_retrieve_response_code($response);
+				}
+
+				$results[] = $row;
+			}
+
+			$payload = [
+				'run_at' => time(),
+				'results' => $results,
+			];
+
+			set_transient(self::REMOTE_HTTP_TRANSIENT_KEY, $payload, self::REMOTE_HTTP_TRANSIENT_TTL);
+
+			$target = add_query_arg(
+				[
+					'page' => self::PAGE_SLUG,
+					'wpst_remote_http_tested' => '1',
+				],
+				admin_url('admin.php')
+			);
+
+			wp_safe_redirect($target);
+			exit;
+		}
+
+		/**
+		 * @return array<int, string>
+		 */
+		private function remote_http_targets(): array {
+			$default_urls = [
+				'https://wordpress.org/',
+				'https://my.elementor.com/',
+			];
+
+			$targets = apply_filters('wpst_diagnostics_remote_http_targets', $default_urls);
+			if (! is_array($targets)) {
+				$targets = $default_urls;
+			}
+
+			$sanitized = [];
+			foreach ($targets as $target) {
+				$url = esc_url_raw((string) $target, ['http', 'https']);
+				if ('' === $url) {
+					continue;
+				}
+				$sanitized[] = $url;
+			}
+
+			$sanitized = array_values(array_unique($sanitized));
+
+			return [] !== $sanitized ? $sanitized : $default_urls;
+		}
+
+		private function render_remote_http_health_check_section(): void {
+			if (! current_user_can('manage_options')) {
+				return;
+			}
+
+			$run_url = wp_nonce_url(
+				admin_url('admin-post.php?action=' . self::REMOTE_HTTP_ACTION),
+				self::REMOTE_HTTP_ACTION
+			);
+
+			echo '<p>' . esc_html__('Runs an on-demand HTTP request test to validate outbound connectivity.', 'wp-security-toolkit') . '</p>';
+			echo '<p><a href="' . esc_url($run_url) . '" class="button button-secondary">' . esc_html__('Run Remote HTTP Test', 'wp-security-toolkit') . '</a></p>';
+
+			$last_result = get_transient(self::REMOTE_HTTP_TRANSIENT_KEY);
+			if (! is_array($last_result)) {
+				echo '<p>' . esc_html__('No remote HTTP test has been run in the last 10 minutes.', 'wp-security-toolkit') . '</p>';
+				return;
+			}
+
+			$run_at = isset($last_result['run_at']) ? (int) $last_result['run_at'] : 0;
+			if ($run_at > 0) {
+				echo '<p><strong>' . esc_html__('Last run at:', 'wp-security-toolkit') . '</strong> ' . esc_html(gmdate('Y-m-d H:i:s', $run_at) . ' UTC') . '</p>';
+			}
+
+			$rows = isset($last_result['results']) && is_array($last_result['results']) ? $last_result['results'] : [];
+			if ([] === $rows) {
+				echo '<p>' . esc_html__('No remote HTTP test results available.', 'wp-security-toolkit') . '</p>';
+				return;
+			}
+
+			echo '<table class="widefat striped" style="max-width: 1000px"><thead><tr>';
+			echo '<th>' . esc_html__('URL', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Status Code', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Response Time (ms)', 'wp-security-toolkit') . '</th>';
+			echo '<th>' . esc_html__('Error', 'wp-security-toolkit') . '</th>';
+			echo '</tr></thead><tbody>';
+
+			foreach ($rows as $row) {
+				$row = is_array($row) ? $row : [];
+				echo '<tr>';
+				echo '<td><code>' . esc_html((string) ($row['url'] ?? '')) . '</code></td>';
+				echo '<td>' . esc_html((string) ($row['status_code'] ?? 'n/a')) . '</td>';
+				echo '<td>' . esc_html((string) ($row['response_time_ms'] ?? '')) . '</td>';
+				echo '<td>' . esc_html((string) ($row['error_message'] ?? '')) . '</td>';
+				echo '</tr>';
+			}
+
+			echo '</tbody></table>';
 		}
 
 

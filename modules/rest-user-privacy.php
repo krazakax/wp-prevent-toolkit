@@ -135,7 +135,13 @@ if (! class_exists('WPST_Rest_User_Privacy_Guard')) {
 	}
 }
 
-add_action('muplugins_loaded', static function (): void {
+$bootstrap = static function (): void {
 	$guard = new WPST_Rest_User_Privacy_Guard();
 	$guard->init();
-});
+};
+
+if (did_action('muplugins_loaded')) {
+	$bootstrap();
+} else {
+	add_action('plugins_loaded', $bootstrap);
+}

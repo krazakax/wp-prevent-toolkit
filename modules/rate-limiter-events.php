@@ -118,8 +118,8 @@ if (! class_exists('WPST_Rate_Limiter_Events')) {
 				$path = '/';
 			}
 
-			$country = isset($data['country']) ? (string) $data['country'] : self::detect_country_code();
-			$country = self::normalize_country_code($country);
+			$raw_country = $data['country'] ?? self::detect_country_code();
+			$country = is_string($raw_country) ? self::normalize_country_code($raw_country) : null;
 
 			$duration_seconds = isset($data['duration_seconds']) && null !== $data['duration_seconds'] ? max(0, (int) $data['duration_seconds']) : null;
 
@@ -212,7 +212,11 @@ if (! class_exists('WPST_Rate_Limiter_Events')) {
 			return self::normalize_country_code($x_country);
 		}
 
-		private static function normalize_country_code(string $country): ?string {
+		private static function normalize_country_code(?string $country): ?string {
+			if (null === $country) {
+				return null;
+			}
+
 			$country = strtoupper(trim($country));
 			if (preg_match('/^[A-Z]{2}$/', $country) !== 1) {
 				return null;

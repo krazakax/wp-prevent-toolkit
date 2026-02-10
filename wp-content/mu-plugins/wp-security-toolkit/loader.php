@@ -16,6 +16,7 @@ $default_enabled_modules = [
 	'rest-user-privacy' => true,
 	'xmlrpc-guard' => true,
 	'rate-limiter' => true,
+	'diagnostics-dashboard' => true,
 ];
 
 /**
@@ -34,6 +35,7 @@ $ordered_files = [
 	'rest-user-privacy' => 'modules/rest-user-privacy.php',
 	'xmlrpc-guard' => 'modules/xmlrpc-guard.php',
 	'rate-limiter' => 'modules/rate-limiter.php',
+	'diagnostics-dashboard' => 'modules/diagnostics-dashboard.php',
 ];
 
 /**

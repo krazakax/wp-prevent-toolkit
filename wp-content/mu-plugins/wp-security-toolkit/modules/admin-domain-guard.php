@@ -1,10 +1,10 @@
 <?php
-/**
- * Plugin Name: WP Security Toolkit - Admin Domain Guard
- * Description: Restricts administrator role assignment to allowlisted email domains.
- */
 
 declare(strict_types=1);
+
+if (! defined('ABSPATH')) {
+	exit;
+}
 
 if (! class_exists('WPST_Restrict_Admin_By_Domain')) {
 	final class WPST_Restrict_Admin_By_Domain {

@@ -1,8 +1,4 @@
 <?php
-/**
- * Plugin Name: WP Security Toolkit - File Lockdown
- * Description: Disables wp-admin file editors and optionally disables file modifications by environment.
- */
 
 declare(strict_types=1);
 

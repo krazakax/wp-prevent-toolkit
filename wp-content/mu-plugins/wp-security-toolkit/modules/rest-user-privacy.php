@@ -1,8 +1,4 @@
 <?php
-/**
- * Plugin Name: WP Security Toolkit - REST User Privacy Guard
- * Description: Blocks common user enumeration vectors while preserving normal REST API usage.
- */
 
 declare(strict_types=1);
 

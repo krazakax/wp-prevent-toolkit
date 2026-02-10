@@ -40,6 +40,19 @@ if (! class_exists('WPST_Rate_Limiter')) {
 			add_action('admin_init', [$this, 'register_settings']);
 			add_action('parse_request', [$this, 'enforce_early_block'], 1);
 			add_action('template_redirect', [$this, 'evaluate_request_rate'], 1);
+			add_filter('wpst_rate_limiter_debug_snapshot', [$this, 'filter_debug_snapshot']);
+		}
+
+		/**
+		 * @param mixed $snapshot
+		 * @return mixed
+		 */
+		public function filter_debug_snapshot($snapshot) {
+			if (! $this->is_debug_snapshot_available()) {
+				return $snapshot;
+			}
+
+			return $this->build_debug_snapshot();
 		}
 
 		public function register_admin_menu(): void {
@@ -373,6 +386,87 @@ if (! class_exists('WPST_Rate_Limiter')) {
 			return true;
 		}
 
+		private function is_debug_snapshot_available(): bool {
+			if (! is_admin() || ! current_user_can('manage_options')) {
+				return false;
+			}
+
+			return (bool) apply_filters('wpst_rate_limiter_debug_enabled', false);
+		}
+
+		/**
+		 * @return array<string, mixed>
+		 */
+		private function build_debug_snapshot(): array {
+			$ip = $this->get_client_ip();
+			$minute_bucket = gmdate('YmdHi');
+			$user_agent_bucket = $this->is_crawler_request() ? 'crawler' : 'human';
+			$settings = $this->settings();
+
+			$block_key = '';
+			$is_whitelisted = false;
+			$is_blocked = false;
+			$block_ttl = null;
+
+			if ('' !== $ip) {
+				$is_whitelisted = $this->is_whitelisted_ip($ip);
+				$block_key = $this->get_block_key($ip);
+				$is_blocked = $this->is_blocked($ip);
+				if ($is_blocked) {
+					$block_ttl = $this->get_transient_ttl_seconds($block_key);
+				}
+			}
+
+			$counters = [];
+			foreach (['any', 'human_view', 'human_404', 'crawler_view', 'crawler_404'] as $type) {
+				$key = '' !== $ip ? $this->get_counter_key($type, $ip, $minute_bucket) : '';
+				$value = '' !== $key ? $this->read_counter($key) : 0;
+				$counters[$type] = [
+					'transient_key' => $key,
+					'value' => $value,
+					'ttl_seconds' => '' !== $key ? $this->get_transient_ttl_seconds($key) : null,
+				];
+			}
+
+			return [
+				'detected_ip' => $ip,
+				'is_admin_bypassed' => $this->is_admin_bypass_enabled_for_request(),
+				'is_whitelisted' => $is_whitelisted,
+				'is_blocked' => $is_blocked,
+				'block_transient_key' => $block_key,
+				'block_expires_in_seconds' => $block_ttl,
+				'current_minute_bucket' => $minute_bucket,
+				'user_agent_bucket' => $user_agent_bucket,
+				'counters' => $counters,
+				'settings_summary' => [
+					'thresholds' => [
+						'any_requests_per_min' => (int) ($settings['any_requests_per_min'] ?? 0),
+						'human_views_per_min' => (int) ($settings['human_views_per_min'] ?? 0),
+						'human_404_per_min' => (int) ($settings['human_404_per_min'] ?? 0),
+						'crawler_views_per_min' => (int) ($settings['crawler_views_per_min'] ?? 0),
+						'crawler_404_per_min' => (int) ($settings['crawler_404_per_min'] ?? 0),
+					],
+					'actions' => [
+						'any' => (string) ($settings['any_action'] ?? 'throttle'),
+						'human_view' => (string) ($settings['human_views_action'] ?? 'throttle'),
+						'human_404' => (string) ($settings['human_404_action'] ?? 'block'),
+						'crawler_view' => (string) ($settings['crawler_views_action'] ?? 'throttle'),
+						'crawler_404' => (string) ($settings['crawler_404_action'] ?? 'block'),
+					],
+					'block_duration_seconds' => (int) ($settings['block_duration_seconds'] ?? 0),
+				],
+			];
+		}
+
+		private function is_admin_bypass_enabled_for_request(): bool {
+			$admin_bypass = (bool) apply_filters('wpst_rate_limiter_admin_bypass', true);
+			if (! $admin_bypass) {
+				return false;
+			}
+
+			return is_admin() || (is_user_logged_in() && current_user_can('manage_options'));
+		}
+
 		private function is_blocked(string $ip): bool {
 			$key = $this->get_block_key($ip);
 
@@ -443,6 +537,20 @@ if (! class_exists('WPST_Rate_Limiter')) {
 			}
 
 			set_transient($key, $value, $ttl);
+		}
+
+		private function get_transient_ttl_seconds(string $key): ?int {
+			if (wp_using_ext_object_cache()) {
+				return null;
+			}
+
+			$timeout = get_option('_transient_timeout_' . $key);
+			if (! is_numeric($timeout)) {
+				return null;
+			}
+
+			$remaining = (int) $timeout - time();
+			return $remaining > 0 ? $remaining : 0;
 		}
 
 		private function is_crawler_request(): bool {

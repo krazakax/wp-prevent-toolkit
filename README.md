@@ -29,3 +29,4 @@ Download ZIP from GitHub → Upload Plugin in WordPress (`Plugins` → `Add New`
 - SEO meta box on Pages and Posts (title, description, robots, canonical URL).
 - CMS settings screen for site title, tagline, and related publishing defaults.
 - Blog shortcodes for archive and single-post rendering (`[wpst_blog_archive]`, `[wpst_blog_single id="123"]`).
+- One-click sample page generator for starter Home and Login pages (`[wpst_login_form]` included on Login).

@@ -17,6 +17,15 @@ This repository now includes a practical blueprint for building a modern, lightw
 - `modules/rate-limiter-events.php`
 - `modules/diagnostics-dashboard.php`
 - `modules/admin-menu.php`
+- `modules/cms-manager.php`
 
 ## Install from GitHub ZIP
 Download ZIP from GitHub → Upload Plugin in WordPress (`Plugins` → `Add New` → `Upload Plugin`) → Activate.
+
+
+## CMS Capabilities Added
+- Admin CMS manager screen for user creation and role assignment.
+- Quick-create forms for Pages and Posts.
+- SEO meta box on Pages and Posts (title, description, robots, canonical URL).
+- CMS settings screen for site title, tagline, and related publishing defaults.
+- Blog shortcodes for archive and single-post rendering (`[wpst_blog_archive]`, `[wpst_blog_single id="123"]`).

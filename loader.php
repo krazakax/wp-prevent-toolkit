@@ -21,6 +21,7 @@ $default_enabled_modules = [
 	'diagnostics-dashboard' => true,
 	'security-headers-baseline' => true,
 	'uploads-execution-guard' => true,
+	'cms-manager' => true,
 ];
 
 /**
@@ -44,6 +45,7 @@ $ordered_files = [
 	'diagnostics-dashboard' => 'modules/diagnostics-dashboard.php',
 	'security-headers-baseline' => 'modules/security-headers-baseline.php',
 	'uploads-execution-guard' => 'modules/uploads-execution-guard.php',
+	'cms-manager' => 'modules/cms-manager.php',
 ];
 
 /**

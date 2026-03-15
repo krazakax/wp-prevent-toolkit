@@ -22,6 +22,10 @@ This repository now includes a practical blueprint for building a modern, lightw
 ## Install from GitHub ZIP
 Download ZIP from GitHub → Upload Plugin in WordPress (`Plugins` → `Add New` → `Upload Plugin`) → Activate.
 
+## Codex / AI Agent Implementation Guidance
+- If an AI coding agent (including Codex) is used for scaffolding or frontend examples in this repository, it should use **React** with **Next.js** only.
+- Do not introduce alternative frontend frameworks (for example Vue, Angular, Svelte, Remix, Nuxt, or Gatsby) in agent-generated proposals unless explicitly requested by a human maintainer.
+
 
 ## CMS Capabilities Added
 - Admin CMS manager screen for user creation and role assignment.

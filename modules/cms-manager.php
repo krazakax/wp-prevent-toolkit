@@ -10,6 +10,7 @@ if (! class_exists('WPST_CMS_Manager')) {
 	final class WPST_CMS_Manager {
 		private const PAGE_SLUG = 'wpst-cms-manager';
 		private const SETTINGS_PAGE_SLUG = 'wpst-cms-settings';
+		private const BOOTSTRAP_OPTION = 'wpst_cms_bootstrap_complete';
 		private const SEO_NONCE_ACTION = 'wpst_seo_meta_nonce_action';
 		private const SEO_NONCE_NAME = 'wpst_seo_meta_nonce';
 
@@ -20,6 +21,7 @@ if (! class_exists('WPST_CMS_Manager')) {
 
 		public function register_hooks(): void {
 			add_action('admin_menu', [$this, 'register_admin_menu'], 50);
+			add_action('init', [$this, 'maybe_bootstrap_default_pages']);
 			add_action('admin_post_wpst_cms_create_user', [$this, 'handle_create_user']);
 			add_action('admin_post_wpst_cms_create_content', [$this, 'handle_create_content']);
 			add_action('admin_post_wpst_cms_create_sample_pages', [$this, 'handle_create_sample_pages']);
@@ -364,27 +366,8 @@ if (! class_exists('WPST_CMS_Manager')) {
 			}
 			check_admin_referer('wpst_cms_create_sample_pages');
 
-			$home_content = '<!-- wp:heading {"level":1} -->'
-				. '<h1>' . esc_html__('Welcome to Our Site', 'wp-security-toolkit') . '</h1>'
-				. '<!-- /wp:heading -->'
-				. '<!-- wp:paragraph -->'
-				. '<p>' . esc_html__('This is a sample homepage. Update this section with your brand message, highlights, and key calls to action.', 'wp-security-toolkit') . '</p>'
-				. '<!-- /wp:paragraph -->'
-				. '<!-- wp:buttons -->'
-				. '<div class="wp-block-buttons">'
-				. '<!-- wp:button -->'
-				. '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="/login">' . esc_html__('Login', 'wp-security-toolkit') . '</a></div>'
-				. '<!-- /wp:button -->'
-				. '</div>'
-				. '<!-- /wp:buttons -->';
-
-			$login_content = '<!-- wp:heading {"level":1} -->'
-				. '<h1>' . esc_html__('Login', 'wp-security-toolkit') . '</h1>'
-				. '<!-- /wp:heading -->'
-				. '<!-- wp:paragraph -->'
-				. '<p>' . esc_html__('Use the form below to sign in to your account.', 'wp-security-toolkit') . '</p>'
-				. '<!-- /wp:paragraph -->'
-				. '<!-- wp:shortcode -->[wpst_login_form]<!-- /wp:shortcode -->';
+			$home_content = $this->get_default_home_content();
+			$login_content = $this->get_default_login_content();
 
 			$home_page_id = $this->upsert_page('home', __('Home', 'wp-security-toolkit'), $home_content);
 			$login_page_id = $this->upsert_page('login', __('Login', 'wp-security-toolkit'), $login_content);
@@ -395,6 +378,7 @@ if (! class_exists('WPST_CMS_Manager')) {
 
 			update_option('show_on_front', 'page');
 			update_option('page_on_front', $home_page_id);
+			update_option(self::BOOTSTRAP_OPTION, '1');
 
 			$this->redirect_with_notice('sample_pages_created');
 		}
@@ -584,6 +568,53 @@ if (! class_exists('WPST_CMS_Manager')) {
 			}
 
 			return (int) $result;
+		}
+
+		public function maybe_bootstrap_default_pages(): void {
+			if ('1' === get_option(self::BOOTSTRAP_OPTION, '0')) {
+				return;
+			}
+
+			$home_page_id = $this->upsert_page('home', __('Home', 'wp-security-toolkit'), $this->get_default_home_content());
+			$login_page_id = $this->upsert_page('login', __('Login', 'wp-security-toolkit'), $this->get_default_login_content());
+
+			if ($home_page_id < 1 || $login_page_id < 1) {
+				return;
+			}
+
+			$page_on_front = (int) get_option('page_on_front', 0);
+			if ($page_on_front < 1 || ! get_post($page_on_front)) {
+				update_option('show_on_front', 'page');
+				update_option('page_on_front', $home_page_id);
+			}
+
+			update_option(self::BOOTSTRAP_OPTION, '1');
+		}
+
+		private function get_default_home_content(): string {
+			return '<!-- wp:heading {"level":1} -->'
+				. '<h1>' . esc_html__('Welcome to Our Site', 'wp-security-toolkit') . '</h1>'
+				. '<!-- /wp:heading -->'
+				. '<!-- wp:paragraph -->'
+				. '<p>' . esc_html__('This is a sample homepage. Update this section with your brand message, highlights, and key calls to action.', 'wp-security-toolkit') . '</p>'
+				. '<!-- /wp:paragraph -->'
+				. '<!-- wp:buttons -->'
+				. '<div class="wp-block-buttons">'
+				. '<!-- wp:button -->'
+				. '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="' . esc_url(home_url('/login/')) . '">' . esc_html__('Login', 'wp-security-toolkit') . '</a></div>'
+				. '<!-- /wp:button -->'
+				. '</div>'
+				. '<!-- /wp:buttons -->';
+		}
+
+		private function get_default_login_content(): string {
+			return '<!-- wp:heading {"level":1} -->'
+				. '<h1>' . esc_html__('Login', 'wp-security-toolkit') . '</h1>'
+				. '<!-- /wp:heading -->'
+				. '<!-- wp:paragraph -->'
+				. '<p>' . esc_html__('Use the form below to sign in to your account.', 'wp-security-toolkit') . '</p>'
+				. '<!-- /wp:paragraph -->'
+				. '<!-- wp:shortcode -->[wpst_login_form]<!-- /wp:shortcode -->';
 		}
 	}
 }

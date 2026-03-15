@@ -393,6 +393,9 @@ if (! class_exists('WPST_CMS_Manager')) {
 				$this->redirect_with_notice('sample_pages_creation_failed');
 			}
 
+			update_option('show_on_front', 'page');
+			update_option('page_on_front', $home_page_id);
+
 			$this->redirect_with_notice('sample_pages_created');
 		}
 

@@ -22,6 +22,7 @@ if (! class_exists('WPST_CMS_Manager')) {
 			add_action('admin_menu', [$this, 'register_admin_menu'], 50);
 			add_action('admin_post_wpst_cms_create_user', [$this, 'handle_create_user']);
 			add_action('admin_post_wpst_cms_create_content', [$this, 'handle_create_content']);
+			add_action('admin_post_wpst_cms_create_sample_pages', [$this, 'handle_create_sample_pages']);
 			add_action('admin_post_wpst_cms_save_settings', [$this, 'handle_save_settings']);
 
 			add_action('add_meta_boxes', [$this, 'register_seo_meta_boxes']);
@@ -29,6 +30,7 @@ if (! class_exists('WPST_CMS_Manager')) {
 
 			add_shortcode('wpst_blog_archive', [$this, 'render_blog_archive_shortcode']);
 			add_shortcode('wpst_blog_single', [$this, 'render_blog_single_shortcode']);
+			add_shortcode('wpst_login_form', [$this, 'render_login_form_shortcode']);
 
 			add_action('admin_notices', [$this, 'render_admin_notices']);
 		}
@@ -48,18 +50,20 @@ if (! class_exists('WPST_CMS_Manager')) {
 			$messages = [
 				'user_created' => __('User created successfully.', 'wp-security-toolkit'),
 				'content_created' => __('Content created successfully.', 'wp-security-toolkit'),
+				'sample_pages_created' => __('Sample Home and Login pages are ready.', 'wp-security-toolkit'),
 				'settings_saved' => __('Settings saved successfully.', 'wp-security-toolkit'),
 				'missing_required_user_fields' => __('Please provide all required user fields.', 'wp-security-toolkit'),
 				'user_creation_failed' => __('User creation failed. Please review inputs and try again.', 'wp-security-toolkit'),
 				'missing_content_title' => __('Content title is required.', 'wp-security-toolkit'),
 				'content_creation_failed' => __('Content creation failed. Please try again.', 'wp-security-toolkit'),
+				'sample_pages_creation_failed' => __('Could not create sample pages. Please try again.', 'wp-security-toolkit'),
 			];
 
 			if (! isset($messages[$notice])) {
 				return;
 			}
 
-			$class = in_array($notice, ['user_created', 'content_created', 'settings_saved'], true)
+			$class = in_array($notice, ['user_created', 'content_created', 'sample_pages_created', 'settings_saved'], true)
 				? 'notice notice-success'
 				: 'notice notice-error';
 
@@ -180,6 +184,14 @@ if (! class_exists('WPST_CMS_Manager')) {
 				<p><?php echo esc_html__('Use these shortcodes on any page to output a basic blog archive or single post view.', 'wp-security-toolkit'); ?></p>
 				<code>[wpst_blog_archive posts_per_page="10"]</code><br />
 				<code>[wpst_blog_single id="123"]</code>
+
+				<h2><?php echo esc_html__('Sample pages', 'wp-security-toolkit'); ?></h2>
+				<p><?php echo esc_html__('Generate a starter Home page and Login page you can customize.', 'wp-security-toolkit'); ?></p>
+				<form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+					<input type="hidden" name="action" value="wpst_cms_create_sample_pages" />
+					<?php wp_nonce_field('wpst_cms_create_sample_pages'); ?>
+					<?php submit_button(__('Create Sample Home + Login Pages', 'wp-security-toolkit'), 'secondary', 'submit', false); ?>
+				</form>
 			</div>
 			<?php
 		}
@@ -346,6 +358,44 @@ if (! class_exists('WPST_CMS_Manager')) {
 			exit;
 		}
 
+		public function handle_create_sample_pages(): void {
+			if (! current_user_can('edit_pages')) {
+				wp_die(esc_html__('You are not allowed to create sample pages.', 'wp-security-toolkit'), 403);
+			}
+			check_admin_referer('wpst_cms_create_sample_pages');
+
+			$home_content = '<!-- wp:heading {"level":1} -->'
+				. '<h1>' . esc_html__('Welcome to Our Site', 'wp-security-toolkit') . '</h1>'
+				. '<!-- /wp:heading -->'
+				. '<!-- wp:paragraph -->'
+				. '<p>' . esc_html__('This is a sample homepage. Update this section with your brand message, highlights, and key calls to action.', 'wp-security-toolkit') . '</p>'
+				. '<!-- /wp:paragraph -->'
+				. '<!-- wp:buttons -->'
+				. '<div class="wp-block-buttons">'
+				. '<!-- wp:button -->'
+				. '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="/login">' . esc_html__('Login', 'wp-security-toolkit') . '</a></div>'
+				. '<!-- /wp:button -->'
+				. '</div>'
+				. '<!-- /wp:buttons -->';
+
+			$login_content = '<!-- wp:heading {"level":1} -->'
+				. '<h1>' . esc_html__('Login', 'wp-security-toolkit') . '</h1>'
+				. '<!-- /wp:heading -->'
+				. '<!-- wp:paragraph -->'
+				. '<p>' . esc_html__('Use the form below to sign in to your account.', 'wp-security-toolkit') . '</p>'
+				. '<!-- /wp:paragraph -->'
+				. '<!-- wp:shortcode -->[wpst_login_form]<!-- /wp:shortcode -->';
+
+			$home_page_id = $this->upsert_page('home', __('Home', 'wp-security-toolkit'), $home_content);
+			$login_page_id = $this->upsert_page('login', __('Login', 'wp-security-toolkit'), $login_content);
+
+			if ($home_page_id < 1 || $login_page_id < 1) {
+				$this->redirect_with_notice('sample_pages_creation_failed');
+			}
+
+			$this->redirect_with_notice('sample_pages_created');
+		}
+
 		public function register_seo_meta_boxes(): void {
 			foreach ($this->seo_post_types as $post_type) {
 				add_meta_box(
@@ -484,6 +534,19 @@ if (! class_exists('WPST_CMS_Manager')) {
 			return (string) ob_get_clean();
 		}
 
+
+		public function render_login_form_shortcode(): string {
+			if (is_user_logged_in()) {
+				return '<p>' . esc_html__('You are already logged in.', 'wp-security-toolkit') . '</p>';
+			}
+
+			return wp_login_form([
+				'echo' => false,
+				'remember' => true,
+				'redirect' => home_url('/'),
+			]);
+		}
+
 		private function redirect_with_notice(string $notice): void {
 			$target = add_query_arg(
 				[
@@ -494,6 +557,30 @@ if (! class_exists('WPST_CMS_Manager')) {
 			);
 			wp_safe_redirect($target);
 			exit;
+		}
+
+		private function upsert_page(string $slug, string $title, string $content): int {
+			$page = get_page_by_path($slug, OBJECT, 'page');
+
+			$page_data = [
+				'post_type' => 'page',
+				'post_title' => $title,
+				'post_content' => $content,
+				'post_status' => 'publish',
+				'post_name' => $slug,
+			];
+
+			if ($page instanceof WP_Post) {
+				$page_data['ID'] = $page->ID;
+			}
+
+			$result = wp_insert_post($page_data, true);
+
+			if ($result instanceof WP_Error) {
+				return 0;
+			}
+
+			return (int) $result;
 		}
 	}
 }
